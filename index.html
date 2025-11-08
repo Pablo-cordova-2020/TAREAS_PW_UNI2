@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan Interactivo de Actividades</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: Se ha diseñado una SPA (Single Page Application) con una estructura de "Dashboard Temático". En lugar de seguir el orden lineal del informe, la información se ha reorganizado en tres secciones principales para una usabilidad óptima del estudiante: 1) 'Resumen', que ofrece una vista de alto nivel con estadísticas clave y una línea de tiempo visual (gráfico de Gantt) de todas las fechas de entrega, 2) 'Actividades', que presenta cada tarea como una "tarjeta" en una cuadrícula filtrable (por tipo de aprendizaje: ACD, AA, APE) y permite ver los detalles completos en una ventana modal, y 3) 'Rúbricas', que consolida todas las tablas de evaluación en una interfaz de pestañas para fácil consulta y comparación. Esta arquitectura transforma un documento estático en una herramienta de planificación interactiva, permitiendo al usuario ver rápidamente los plazos, filtrar tareas por tipo y acceder a detalles específicos (como procedimientos o rúbricas) bajo demanda, sin verse abrumado por toda la información a la vez. -->
+    <!-- Visualization & Content Choices: 1) Fechas de inicio/fin de 5 actividades -> Meta: Informar plazos -> Visualización: Gráfico de barras horizontales (tipo Gantt) -> Interacción: Tooltip al pasar el ratón -> Justificación: Un gráfico de plazos es mucho más intuitivo que leer 10 fechas separadas en un texto -> Biblioteca: Chart.js (Canvas). 2) 5 actividades con detalles (procedimiento, producto, tema) -> Meta: Organizar, Informar -> Presentación: Cuadrícula de "Tarjetas" (HTML/Tailwind) y Ventana Modal -> Interacción: Botones de filtro (JS) para mostrar/ocultar tarjetas por tipo (ACD, AA, APE), Clic en "Ver Detalles" para abrir modal con información de un objeto JS -> Justificación: Las tarjetas ofrecen un resumen limpio; el filtro permite al usuario centrarse; el modal aplica "progressive disclosure" para ocultar la complejidad hasta que se necesita -> Biblioteca: Vanilla JS, HTML. 3) 5 Rúbricas de evaluación (tablas) -> Meta: Organizar, Comparar -> Presentación: Interfaz de Pestañas (HTML/Tailwind) con tablas HTML estilizadas -> Interacción: Clic en pestañas para cambiar la rúbrica visible -> Justificación: Consolida 5 elementos complejos en un solo componente limpio, facilitando la consulta de criterios de calificación -> Biblioteca: Vanilla JS, HTML. 4) Estadísticas clave (Nº de tareas, tipos) -> Meta: Informar (resumen) -> Presentación: Tarjetas de estadísticas (HTML/Tailwind) -> Interacción: Ninguna -> Justificación: Patrón de dashboard estándar para contexto inmediato. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        .section-content {
+            display: none;
+        }
+        .section-content.active {
+            display: block;
+        }
+        .nav-button.active {
+            border-bottom-width: 2px;
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+        .filter-button.active {
+            background-color: #1e3a8a;
+            color: #ffffff;
+        }
+        .tab-button.active {
+            border-bottom-width: 2px;
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+        .rubric-content {
+            display: none;
+        }
+        .rubric-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <h1 class="text-3xl font-bold text-blue-900">Plan de Actividades: Programación con Bases de Datos</h1>
+            <p class="mt-1 text-lg text-slate-600">Panel interactivo para explorar las actividades del curso y los criterios de evaluación.</p>
+        </div>
+    </header>
+
+    <nav class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-center space-x-4">
+                <button data-target="resumen" class="nav-button active text-slate-600 font-semibold py-4 px-3 text-sm uppercase transition duration-150 ease-in-out">
+                    Resumen y Plazos
+                </button>
+                <button data-target="actividades" class="nav-button text-slate-600 font-semibold py-4 px-3 text-sm uppercase transition duration-150 ease-in-out">
+                    Detalle de Actividades
+                </button>
+                <button data-target="rubricas" class="nav-button text-slate-600 font-semibold py-4 px-3 text-sm uppercase transition duration-150 ease-in-out">
+                    Rúbricas de Evaluación
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <section id="resumen-section" class="section-content active">
+            <div class="bg-white rounded-lg shadow-lg p-6 md:p-8">
+                <h2 class="text-2xl font-bold text-blue-900 mb-4">Resumen del Módulo</h2>
+                <p class="text-slate-700 mb-8">
+                    Esta sección proporciona una vista general de todas las actividades requeridas, el objetivo de aprendizaje común y una línea de tiempo visual con los plazos clave. Use este panel para comprender rápidamente el alcance del trabajo y planificar su tiempo.
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                    <div class="bg-blue-100 border border-blue-200 rounded-lg p-6 text-center">
+                        <div class="text-4xl font-bold text-blue-900">5</div>
+                        <div class="text-lg font-semibold text-blue-800 mt-2">Actividades Totales</div>
+                    </div>
+                    <div class="bg-amber-100 border border-amber-200 rounded-lg p-6 text-center">
+                        <div class="text-4xl font-bold text-amber-900">3</div>
+                        <div class="text-lg font-semibold text-amber-800 mt-2">Tipos de Aprendizaje</div>
+                    </div>
+                    <div class="bg-emerald-100 border border-emerald-200 rounded-lg p-6 text-center">
+                        <div class="text-4xl font-bold text-emerald-900">1</div>
+                        <div class="text-lg font-semibold text-emerald-800 mt-2">Proyecto Práctico (APE)</div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-bold text-blue-900 mb-6 text-center">Línea de Tiempo de Actividades (2025)</h3>
+                <div class="chart-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section id="actividades-section" class="section-content">
+            <div class="bg-white rounded-lg shadow-lg p-6 md:p-8">
+                <h2 class="text-2xl font-bold text-blue-900 mb-4">Explorador de Actividades</h2>
+                <p class="text-slate-700 mb-6">
+                    Aquí puede explorar cada actividad en detalle. Use los filtros para ver tareas por tipo de aprendizaje (ACD, AA, APE). Haga clic en "Ver Detalles" en cualquier tarjeta para abrir una ventana con el procedimiento completo, los recursos y los objetivos específicos.
+                </p>
+
+                <div class="flex justify-center space-x-2 mb-8" id="filter-buttons">
+                    <button data-filter="all" class="filter-button active bg-blue-800 text-white font-semibold py-2 px-5 rounded-full text-sm shadow transition duration-150 ease-in-out">Todos</button>
+                    <button data-filter="ACD" class="filter-button bg-gray-200 text-gray-700 font-semibold py-2 px-5 rounded-full text-sm shadow transition duration-150 ease-in-out hover:bg-gray-300">ACD</button>
+                    <button data-filter="AA" class="filter-button bg-gray-200 text-gray-700 font-semibold py-2 px-5 rounded-full text-sm shadow transition duration-150 ease-in-out hover:bg-gray-300">AA</button>
+                    <button data-filter="APE" class="filter-button bg-gray-200 text-gray-700 font-semibold py-2 px-5 rounded-full text-sm shadow transition duration-150 ease-in-out hover:bg-gray-300">APE</button>
+                </div>
+
+                <div id="activity-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <div class="activity-card border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300" data-type="ACD" data-id="acd3">
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-bold text-blue-900">ACD 3: Foro Académico</h3>
+                                <span class="text-xs font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">ACD</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-1"><strong>Tema:</strong> Bases de datos en la gestión educativa.</p>
+                            <p class="text-sm text-slate-600 mb-4"><strong>Producto:</strong> Aporte asíncrono.</p>
+                            <p class="text-xs text-gray-500"><strong>Plazo:</strong> 10 Nov - 7 Dic, 2025</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 text-right">
+                            <button class="show-details-btn text-sm font-semibold text-amber-600 hover:text-amber-500 transition duration-150 ease-in-out">Ver Detalles &rarr;</button>
+                        </div>
+                    </div>
+
+                    <div class="activity-card border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300" data-type="ACD" data-id="acd4">
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-bold text-blue-900">ACD 4: Debate de Expertos</h3>
+                                <span class="text-xs font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">ACD</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-1"><strong>Tema:</strong> Programación con Bases de Datos.</p>
+                            <p class="text-sm text-slate-600 mb-4"><strong>Producto:</strong> Aporte síncrono o asíncrono.</p>
+                            <p class="text-xs text-gray-500"><strong>Plazo:</strong> 8 Dic - 14 Dic, 2025</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 text-right">
+                            <button class="show-details-btn text-sm font-semibold text-amber-600 hover:text-amber-500 transition duration-150 ease-in-out">Ver Detalles &rarr;</button>
+                        </div>
+                    </div>
+
+                    <div class="activity-card border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300" data-type="AA" data-id="aa3">
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-bold text-blue-900">AA 3: Mapa Conceptual</h3>
+                                <span class="text-xs font-semibold bg-green-100 text-green-800 py-1 px-3 rounded-full">AA</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-1"><strong>Tema:</strong> BB.DD., Relacionales y No Relacionales.</p>
+                            <p class="text-sm text-slate-600 mb-4"><strong>Producto:</strong> Documento en PDF (3 mapas).</p>
+                            <p class="text-xs text-gray-500"><strong>Plazo:</strong> 10 Nov - 30 Nov, 2025</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 text-right">
+                            <button class="show-details-btn text-sm font-semibold text-amber-600 hover:text-amber-500 transition duration-150 ease-in-out">Ver Detalles &rarr;</button>
+                        </div>
+                    </div>
+
+                    <div class="activity-card border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300" data-type="AA" data-id="aa4">
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-bold text-blue-900">AA 4: Storyboard</h3>
+                                <span class="text-xs font-semibold bg-green-100 text-green-800 py-1 px-3 rounded-full">AA</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-1"><strong>Tema:</strong> BB.DD. para creación de recursos educativos.</p>
+                            <p class="text-sm text-slate-600 mb-4"><strong>Producto:</strong> Documento en PDF con Storyboard.</p>
+                            <p class="text-xs text-gray-500"><strong>Plazo:</strong> 1 Dic - 14 Dic, 2025</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 text-right">
+                            <button class="show-details-btn text-sm font-semibold text-amber-600 hover:text-amber-500 transition duration-150 ease-in-out">Ver Detalles &rarr;</button>
+                        </div>
+                    </div>
+
+                    <div class="activity-card border border-gray-200 rounded-lg shadow-md bg-white overflow-hidden transition-all duration-300" data-type="APE" data-id="ape2">
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-bold text-blue-900">APE 2: Desarrollo de BD</h3>
+                                <span class="text-xs font-semibold bg-red-100 text-red-800 py-1 px-3 rounded-full">APE</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-1"><strong>Tema:</strong> Bases de datos relacionales.</p>
+                            <p class="text-sm text-slate-600 mb-4"><strong>Producto:</strong> Documento PDF y archivo de BB.DD.</p>
+                            <p class="text-xs text-gray-500"><strong>Plazo:</strong> 10 Nov - 14 Dic, 2025</p>
+                        </div>
+                        <div class="bg-gray-50 p-4 text-right">
+                            <button class="show-details-btn text-sm font-semibold text-amber-600 hover:text-amber-500 transition duration-150 ease-in-out">Ver Detalles &rarr;</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="rubricas-section" class="section-content">
+            <div class="bg-white rounded-lg shadow-lg p-6 md:p-8">
+                <h2 class="text-2xl font-bold text-blue-900 mb-4">Rúbricas de Evaluación</h2>
+                <p class="text-slate-700 mb-6">
+                    Consulte cómo se evaluará cada actividad. Seleccione la pestaña de la actividad correspondiente para ver los criterios detallados y la puntuación. Es fundamental revisar esto antes de entregar su trabajo.
+                </p>
+
+                <div class="border-b border-gray-200 mb-6">
+                    <nav class="flex flex-wrap -mb-px" id="rubric-tabs">
+                        <button data-target="rubric-acd3" class="tab-button active text-slate-600 font-semibold py-3 px-4 text-sm transition duration-150 ease-in-out">ACD 3 (Foro)</button>
+                        <button data-target="rubric-acd4" class="tab-button text-slate-600 font-semibold py-3 px-4 text-sm transition duration-150 ease-in-out">ACD 4 (Debate)</button>
+                        <button data-target="rubric-aa3" class="tab-button text-slate-600 font-semibold py-3 px-4 text-sm transition duration-150 ease-in-out">AA 3 (Mapa)</button>
+                        <button data-target="rubric-aa4" class="tab-button text-slate-600 font-semibold py-3 px-4 text-sm transition duration-150 ease-in-out">AA 4 (Storyboard)</button>
+                        <button data-target="rubric-ape2" class="tab-button text-slate-600 font-semibold py-3 px-4 text-sm transition duration-150 ease-in-out">APE 2 (BB.DD.)</button>
+                    </nav>
+                </div>
+
+                <div id="rubric-acd3" class="rubric-content active">
+                    <h3 class="text-xl font-bold text-blue-800 mb-4">Rúbrica: Foro Académico (ACD 3)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterio</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Excelente (3-4 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bueno (2-3 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Regular (1-2 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Insuficiente (0 Pts)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Capacidad de análisis (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Coherencia, pertinencia, argumenta con autores/experiencia. Parafraseo APA. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Coherencia, pertinencia, argumenta con autores. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Coherencia con la temática. (1 Pt)</td>
+                                    <td class="px-6 py-4 text-sm">No aporta, plagio, IA. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Capacidad de Debate (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Debate con fundamento, interactúa analíticamente con al menos 2 compañeros. Parafraseo APA. (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Interactúa analíticamente con 1 compañero. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Interactúa con 1 compañero, promoviendo respeto. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, IA. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Capacidad de síntesis (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Aporta nuevas ideas, contribuye con criterio personal. Parafraseo APA. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Aporta ideas y contribuye con criterio personal. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Su aporte no contribuye. (1 Pt)</td>
+                                    <td class="px-6 py-4 text-sm">No aporta, plagio, IA. (0 Pts)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="rubric-acd4" class="rubric-content">
+                    <h3 class="text-xl font-bold text-blue-800 mb-4">Rúbrica: Debate de Expertos (ACD 4)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterio</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Excelente (10 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bueno (8 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Regular (6 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Insuficiente (0 Pts)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Participación del estudiante</td>
+                                    <td class="px-6 py-4 text-sm">Define personalmente el tema con originalidad, coherencia, pertinencia y argumentación científica.</td>
+                                    <td class="px-6 py-4 text-sm">Define personalmente el tema con coherencia y pertinencia.</td>
+                                    <td class="px-6 py-4 text-sm">Participa sobre la temática tratada.</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, enlace no visible, etc.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="rubric-aa3" class="rubric-content">
+                    <h3 class="text-xl font-bold text-blue-800 mb-4">Rúbrica: Mapa Conceptual (AA 3)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterio</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Excelente (3-4 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bueno (2-3 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Regular (1.5-2 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Insuficiente (0 Pts)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Contenido y Relevancia (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre todos los temas, preciso, relevante, aplica APA 7. (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre la mayoría de los temas, con omisiones menores. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre algunos temas, falta info. importante. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Estructura y Organización (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Excelentemente organizado, estructura clara, lógica, aplica APA 7. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Bien organizado, pero estructura mejorable. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Estructura básica, carece de cohesión. (1.5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Calidad y Presentación (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Claro, profesional, presentación fluida, atractiva, sin errores. Aplica APA 7. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Mayormente claro, presentación adecuada. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Algunas imperfecciones, menos fluida. (1.5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="rubric-aa4" class="rubric-content">
+                    <h3 class="text-xl font-bold text-blue-800 mb-4">Rúbrica: Storyboard (AA 4)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterio</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Excelente (5 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bueno (3-4 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Regular (1-2 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Insuficiente (0 Pts)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Organización y coherencia (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre todos los temas, preciso, relevante, APA 7. Storyboard coherente, todas las partes. (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre mayoría de temas, omisiones menores. Storyboard poco organizado. (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Cubre algunos temas, falta info. Storyboard desorganizado. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Argumentación (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos del storyboard argumentados y fundamentados científicamente. (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos poco argumentados. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos no argumentados. (1 Pt)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="rubric-ape2" class="rubric-content">
+                    <h3 class="text-xl font-bold text-blue-800 mb-4">Rúbrica: Desarrollo de Base de Datos (APE 2)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criterio</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Excelente (5 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bueno (3-4 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Regular (1-2 Pts)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Insuficiente (0 Pts)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Organización y coherencia (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Documento preciso, relevante, APA 7. BB.DD. coherente, todas las partes y relaciones. (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Documento con omisiones menores. BB.DD. poco organizada. (4 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Documento con falta de info. BB.DD. desorganizada. (2 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-semibold">Argumentación y datos (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos de la BB.DD. argumentados, fundamentados. Datos requeridos insertados. (5 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos poco argumentados. Datos incompletos. (3 Pts)</td>
+                                    <td class="px-6 py-4 text-sm">Elementos no argumentados. Sin datos. (1 Pt)</td>
+                                    <td class="px-6 py-4 text-sm">No participa, plagio, etc. (0 Pts)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="text-center py-6 mt-8">
+        <p class="text-sm text-slate-500">Este es un panel de control generado para facilitar la visualización del plan de estudios.</p>
+    </footer>
+
+    <div id="activity-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;">
+        <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center p-6 border-b border-gray-200">
+                <h2 id="modal-title" class="text-2xl font-bold text-blue-900"></h2>
+                <button id="modal-close" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <div id="modal-content" class="p-6 md:p-8">
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const activityData = {
+                acd3: {
+                    title: "ACD 3: Foro Académico",
+                    content: `
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Objetivo:</h4>
+                        <p class="mb-6">Comprender la programación con bases de datos para diseñar recursos educativos.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Prerrequisitos:</h4>
+                        <p class="mb-6">Leer el material que se encuentra en su guía de estudio, y en el texto básico.</p>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Proceso:</h4>
+                        <p class="mb-4">Participe en el foro académico desarrollando las preguntas que se proponen para cada semana:</p>
+                        <ul class="list-disc list-inside space-y-3 mb-6">
+                            <li><strong>Capacidad de análisis:</strong> ¿Cuál es el papel de una de bases de datos en la organización y gestión de la información educativa?</li>
+                            <li><strong>Capacidad debate:</strong> ¿Qué tipo de base de datos es más adecuada para una aplicación educativa en línea: relacional o no relacional? Justifica tu respuesta.</li>
+                            <li><strong>Capacidad de síntesis:</strong> ¿Qué información básica debería guardar una base de datos para una biblioteca escolar y cómo organizarías esos datos?.</li>
+                        </ul>
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Recursos:</h4>
+                        <p class="text-sm">Texto básico, EVA LMS MOODLE, Bibliografía: <a href="https://drive.google.com/file/d/1NDa6k7_pOMhzDLfe4EYWHaxwAWZaeViY/view" target="_blank" class="text-blue-600 hover:underline">Enlace Google Drive</a></p>
+                    `
+                },
+                acd4: {
+                    title: "ACD 4: Debate de Expertos",
+                    content: `
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Objetivo:</h4>
+                        <p class="mb-6">Comprender la programación con bases de datos para diseñar recursos educativos.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Prerrequisitos:</h4>
+                        <p class="mb-6">Lea el material que se encuentra en su guía de estudio, así como las lecturas recomendadas.</p>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Proceso:</h4>
+                        <ul class="list-disc list-inside space-y-3 mb-6">
+                            <li>Participe de manera obligatoria en la videoconferencia que se desarrollará de forma síncrona con el tema: “Programación con Bases de Datos”.</li>
+                            <li>El docente presenta una videoconferencia académica (adjunta en el aula en el apartado de debate de expertos).</li>
+                            <li>Luego de la participación del docente; los estudiantes realizan su participación de manera síncrona o asíncrona.</li>
+                            <li>Finalmente; el docente realiza el cierre y retroalimentación del tema.</li>
+                        </ul>
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Recursos:</h4>
+                        <p class="text-sm">Texto básico, EVA LMS MOODLE, Plataforma Zoom, Herramienta Web 2.0, Bibliografía: <a href="https://drive.google.com/file/d/1NDa6k7_pOMhzDLfe4EYWHaxwAWZaeViY/view" target="_blank" class="text-blue-600 hover:underline">Enlace Google Drive</a></p>
+                    `
+                },
+                aa3: {
+                    title: "AA 3: Mapa Conceptual",
+                    content: `
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Objetivo:</h4>
+                        <p class="mb-6">Comprender la programación con bases de datos para diseñar recursos educativos.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Proceso de Investigación:</h4>
+                        <ul class="list-disc list-inside space-y-2 mb-4">
+                            <li><strong>Tema 1:</strong> Bases de datos (qué es, fundamentos, objetivos educativos, importancia, tipos).</li>
+                            <li><strong>Tema 2:</strong> Bases de datos relacionales (concepto, ventajas, desventajas, características, usos, ejemplos).</li>
+                            <li><strong>Tema 3:</strong> Bases de datos no relacionales (concepto, ventajas, desventajas, características, usos, ejemplos).</li>
+                        </ul>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Elaboración del Mapa Conceptual:</h4>
+                        <p class="mb-6">Utilice herramientas Web 2.0 (CmapTools, Lucidchart, Canva, Miro) para diseñar **3 mapas conceptuales** (1 por tema). Deben ser claros, creativos, usar conectores y mostrar interrelaciones.</p>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Elaboración del Documento (PDF 6-10 carillas):</h4>
+                        <ul class="list-disc list-inside space-y-2 mb-6">
+                            <li>Portada (Universidad, Carrera, Asignatura, Título, Estudiante, Docente, Fecha).</li>
+                            <li>Introducción breve.</li>
+                            <li>Desarrollo (uno por sección) con los mapas conceptuales insertados como imagen.</li>
+                            <li>Conclusiones sobre la importancia de las BB.DD. en recursos educativos.</li>
+                            <li>Referencias bibliográficas (APA7).</li>
+                            <li>Enlace válido de los mapas conceptuales.</li>
+                        </ul>
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Recursos:</h4>
+                        <p class="text-sm">Texto básico, EVA LMS MOODLE, Herramienta Web 2.0, Bibliografía: <a href="https://drive.google.com/file/d/1NDa6k7_pOMhzDLfe4EYWHaxwAWZaeViY/view" target="_blank" class="text-blue-600 hover:underline">Enlace Google Drive</a></p>
+                    `
+                },
+                aa4: {
+                    title: "AA 4: Storyboard",
+                    content: `
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Objetivo:</h4>
+                        <p class="mb-6">Comprender la programación con bases de datos para diseñar recursos educativos.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Prerrequisitos:</h4>
+                        <p class="mb-6">Leer en el texto básico el tema, características de la didáctica de la informática.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Tema:</h4>
+                        <p class="mb-6">Bases de datos, bases de datos relacionales y no relacionales para la creación recursos educativos para apoyar a los procesos de enseñanza y aprendizaje.</p>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Elaboración del Documento (PDF 4-8 carillas):</h4>
+                        <ul class="list-disc list-inside space-y-2 mb-6">
+                            <li>Portada.</li>
+                            <li>Introducción breve.</li>
+                            <li><strong>Desarrollo:</strong>
+                                <ul class="list-disc list-inside ml-6 mt-2">
+                                    <li><strong>Estructura del Storyboard:</strong> Identificar aspectos clave, definir estructuras jerárquicas, secuencias, acciones, diálogos.</li>
+                                    <li><strong>Elaboración del Storyboard:</strong> Usar herramienta Web 2.0. Debe ser claro, creativo y abarcar todo el contenido.</li>
+                                </ul>
+                            </li>
+                            <li>Conclusiones (Sobre la importancia de la Programación por bloques para recursos educativos - *Nota: verificar si este tema es correcto o si debe ser sobre BB.DD.*).</li>
+                            <li>Referencias bibliográficas (APA7).</li>
+                            <li>Enlace válido y público del Storyboard.</li>
+                        </ul>
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Recursos:</h4>
+                        <p class="text-sm">Texto básico, EVA LMS MOODLE, Herramienta Web 2.0, Bibliografía: <a href="https://drive.google.com/file/d/1NDa6k7_pOMhzDLfe4EYWHaxwAWZaeViY/view" target="_blank" class="text-blue-600 hover:underline">Enlace Google Drive</a></p>
+                    `
+                },
+                ape2: {
+                    title: "APE 2: Desarrollo de una Base de Datos",
+                    content: `
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Objetivo:</h4>
+                        <p class="mb-6">Comprender la programación con bases de datos para diseñar recursos educativos.</p>
+                        
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Proceso:</h4>
+                        <p class="mb-6">Desarrollar una base de datos para el control de préstamos y devoluciones de libros en una biblioteca escolar.</p>
+                        <ul class="list-decimal list-inside space-y-3 mb-6">
+                            <li><strong>Fase 1. Definición de Requisitos:</strong> Identificar usuarios (bibliotecarios, estudiantes, profesores) y funcionalidades.</li>
+                            <li><strong>Fase 2. Diseño del Sistema:</strong> Crear modelo conceptual (Diagrama E/R) con entidades (libros, usuarios, préstamos) y relaciones. Diseñar modelo lógico (tablas normalizadas).</li>
+                            <li><strong>Fase 3. Selección de Tecnología:</strong> Elegir SGBD Relacional (MySQL, PostgreSQL, Access).</li>
+                            <li><strong>Fase 4. Desarrollo de la Aplicación:</strong> Diseñar interfaz amigable (sugiere Access) para gestionar préstamos, reservas, búsquedas.</li>
+                            <li><strong>Fase 5. Integración y Pruebas:</strong> Realizar pruebas funcionales. Insertar **mínimo 10 registros por tabla**.</li>
+                        </ul>
+
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Elaboración del Documento (PDF 4-10 carillas):</h4>
+                        <ul class="list-disc list-inside space-y-2 mb-6">
+                            <li>Portada.</li>
+                            <li>Introducción breve.</li>
+                            <li><strong>Desarrollo:</strong> Insertar capturas de pantalla de las **tablas, relaciones y datos insertados**.</li>
+                            <li>Conclusiones sobre la importancia del desarrollo de BB.DD. en el ámbito educativo.</li>
+                            <li>Referencias bibliográficas (APA7).</li>
+                            <li><strong>Archivo de la base de datos:</strong> Adjuntar el link público y válido para descargar el archivo.</li>
+                        </ul>
+                        <h4 class="text-lg font-semibold text-slate-800 mb-3">Recursos:</h4>
+                        <p class="text-sm">Texto básico, EVA LMS MOODLE, Bibliografía: <a href="https://drive.google.com/file/d/1NDa6k7_pOMhzDLfe4EYWHaxwAWZaeViY/view" target="_blank" class="text-blue-600 hover:underline">Enlace Google Drive</a></p>
+                    `
+                }
+            };
+
+            const navButtons = document.querySelectorAll('.nav-button');
+            const sections = document.querySelectorAll('.section-content');
+
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.dataset.target;
+
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+
+                    sections.forEach(section => {
+                        if (section.id === `${targetId}-section`) {
+                            section.classList.add('active');
+                        } else {
+                            section.classList.remove('active');
+                        }
+                    });
+                });
+            });
+
+            const filterButtonsContainer = document.getElementById('filter-buttons');
+            const activityCards = document.querySelectorAll('.activity-card');
+
+            filterButtonsContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const filter = e.target.dataset.filter;
+
+                    document.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active', 'bg-blue-800', 'text-white'));
+                    e.target.classList.add('active', 'bg-blue-800', 'text-white');
+
+                    activityCards.forEach(card => {
+                        if (filter === 'all' || card.dataset.type === filter) {
+                            card.style.display = 'block';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                }
+            });
+
+            const modal = document.getElementById('activity-modal');
+            const modalCloseBtn = document.getElementById('modal-close');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            const activityGrid = document.getElementById('activity-grid');
+
+            activityGrid.addEventListener('click', (e) => {
+                const detailsButton = e.target.closest('.show-details-btn');
+                if (detailsButton) {
+                    const card = detailsButton.closest('.activity-card');
+                    const activityId = card.dataset.id;
+                    const data = activityData[activityId];
+
+                    if (data) {
+                        modalTitle.textContent = data.title;
+                        modalContent.innerHTML = data.content;
+                        modal.style.display = 'flex';
+                    }
+                }
+            });
+
+            const closeModal = () => {
+                modal.style.display = 'none';
+            };
+
+            modalCloseBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+
+            const rubricTabsContainer = document.getElementById('rubric-tabs');
+            const rubricContents = document.querySelectorAll('.rubric-content');
+
+            rubricTabsContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const targetId = e.target.dataset.target;
+
+                    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+
+                    rubricContents.forEach(content => {
+                        if (content.id === targetId) {
+                            content.classList.add('active');
+                        } else {
+                            content.classList.remove('active');
+                        }
+                    });
+                }
+            });
+
+            const parseDate = (dateStr) => {
+                const parts = dateStr.split(' ');
+                const day = parts[0];
+                const monthName = parts[2].toLowerCase();
+                const year = 2025;
+                const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+                const month = months.indexOf(monthName);
+                return new Date(year, month, day);
+            };
+
+            const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+            new Chart(timelineCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['APE 2: Desarrollo BB.DD.', 'AA 4: Storyboard', 'AA 3: Mapa Conceptual', 'ACD 4: Debate Expertos', 'ACD 3: Foro Académico'],
+                    datasets: [{
+                        label: 'Duración de Actividad',
+                        data: [
+                            { x: [new Date('2025-11-10'), new Date('2025-12-14')], y: 'APE 2: Desarrollo BB.DD.' },
+                            { x: [new Date('2025-12-01'), new Date('2025-12-14')], y: 'AA 4: Storyboard' },
+                            { x: [new Date('2025-11-10'), new Date('2025-11-30')], y: 'AA 3: Mapa Conceptual' },
+                            { x: [new Date('2025-12-08'), new Date('2025-12-14')], y: 'ACD 4: Debate Expertos' },
+                            { x: [new Date('2025-11-10'), new Date('2025-12-07')], y: 'ACD 3: Foro Académico' }
+                        ],
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.6)',
+                            'rgba(34, 197, 94, 0.6)',
+                            'rgba(34, 197, 94, 0.6)',
+                            'rgba(59, 130, 246, 0.6)',
+                            'rgba(59, 130, 246, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(239, 68, 68, 1)',
+                            'rgba(34, 197, 94, 1)',
+                            'rgba(34, 197, 94, 1)',
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(59, 130, 246, 1)'
+                        ],
+                        borderWidth: 1,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'week',
+                                displayFormats: {
+                                    week: 'dd MMM'
+                                }
+                            },
+                            min: '2025-11-03',
+                            max: '2025-12-21',
+                            grid: {
+                                display: true
+                            },
+                            title: {
+                                display: true,
+                                text: 'Fechas (2025)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const d = context.raw;
+                                    const s = d.x[0].toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                                    const e = d.x[1].toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                                    return `${d.y}: ${s} - ${e}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>
